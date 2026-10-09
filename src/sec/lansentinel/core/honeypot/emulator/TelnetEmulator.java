@@ -1,0 +1,53 @@
+package sec.lansentinel.core.honeypot.emulator;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+
+/**
+ * Telnet伪装：伪造Linux登录提示，骗取攻击者输入的账号密码。
+ * 登录永远失败，诱使对方反复尝试（配合R2暴力破解规则）。
+ */
+public class TelnetEmulator implements ServiceEmulator {
+
+    @Override
+    public String protocol() {
+        return "TELNET";
+    }
+
+    @Override
+    public String emulate(Socket socket) throws IOException {
+        OutputStream out = socket.getOutputStream();
+        BufferedReader in = new BufferedReader(
+                new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+
+        send(out, "Ubuntu 18.04.5 LTS\r\n");
+        send(out, "login: ");
+        String user = readLine(in);
+
+        send(out, "Password: ");
+        String pass = readLine(in);
+
+        // 永远拒绝，攻击者大概率换一组凭据再试
+        send(out, "\r\nLogin incorrect\r\n");
+        return "user=" + safe(user) + " pass=" + safe(pass);
+    }
+
+    private void send(OutputStream out, String text) throws IOException {
+        out.write(text.getBytes(StandardCharsets.UTF_8));
+        out.flush();
+    }
+
+    private String readLine(BufferedReader in) throws IOException {
+        String line = in.readLine();
+        return line == null ? "" : line;
+    }
+
+    /** 防止攻击者输入控制字符污染日志 */
+    private String safe(String s) {
+        return s.replaceAll("[\\p{Cntrl}]", "");
+    }
+}
