@@ -1,2 +1,4 @@
 out/
 *.class
+*.log
+report_test/
