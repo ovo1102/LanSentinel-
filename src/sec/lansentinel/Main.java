@@ -18,12 +18,15 @@ import sec.lansentinel.model.ArpEntry;
 import sec.lansentinel.model.HostInfo;
 import sec.lansentinel.service.AuthGuard;
 import sec.lansentinel.service.ConfigManager;
+import sec.lansentinel.ui.MainFrame;
 import sec.lansentinel.util.IpUtil;
 
 /**
  * LanSentinel —— 局域网威胁感知系统
  *
  * 运行模式：
+ *   java sec.lansentinel.Main           启动图形界面（默认）
+ *   java sec.lansentinel.Main gui       启动图形界面
  *   java sec.lansentinel.Main scan      M1 网段扫描演示
  *   java sec.lansentinel.Main honeypot  M2 蜜罐诱捕演示（含模拟攻击自检）
  *   java sec.lansentinel.Main arp       M3 ARP欺骗检测演示（含模拟攻击自检）
@@ -39,13 +42,17 @@ public class Main {
         AuthGuard authGuard = new AuthGuard(config);
         System.out.println("授权网段: " + authGuard.getRangeText());
 
-        String mode = args.length > 0 ? args[0] : "scan";
+        String mode = args.length > 0 ? args[0] : "gui";
         if ("honeypot".equalsIgnoreCase(mode)) {
             runHoneypotDemo(config);
         } else if ("arp".equalsIgnoreCase(mode)) {
             runArpDemo(config);
-        } else {
+        } else if ("scan".equalsIgnoreCase(mode)) {
             runScanDemo(config, authGuard);
+        } else {
+            // 默认启动图形界面
+            javax.swing.SwingUtilities.invokeLater(
+                    () -> new MainFrame(config, authGuard).setVisible(true));
         }
     }
 
@@ -210,10 +217,13 @@ public class Main {
         }
     }
 
-    /** 读空服务端响应（直到超时），保证交互流程完整 */
+    /** 读尽服务端响应直到连接关闭（EOF），保证服务端完整走完交互并优雅关闭 */
     private static void drain(Socket s) {
         try {
-            s.getInputStream().read(new byte[512]);
+            byte[] buf = new byte[512];
+            while (s.getInputStream().read(buf) != -1) {
+                // 持续读取直到EOF
+            }
         } catch (IOException ignored) {
         }
     }

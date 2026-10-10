@@ -36,10 +36,21 @@ public class ArpMonitor {
     private final Map<String, Set<String>> macToIps = new HashMap<>();
     /** 是否已建立基线 */
     private boolean baselineReady = false;
+    /** 每次轮询后的快照回调（GUI用于刷新映射表） */
+    private SnapshotListener snapshotListener;
+
+    /** ARP表快照监听器 */
+    public interface SnapshotListener {
+        void onSnapshot(List<ArpEntry> entries);
+    }
 
     public ArpMonitor(AlertEngine alertEngine, int intervalSeconds) {
         this.alertEngine = alertEngine;
         this.intervalSeconds = intervalSeconds;
+    }
+
+    public void setSnapshotListener(SnapshotListener listener) {
+        this.snapshotListener = listener;
     }
 
     /** 启动定时监控（首次立即执行一次以建立基线） */
@@ -82,6 +93,7 @@ public class ArpMonitor {
             }
             baselineReady = true;
             System.out.println("[ARP] 基线已建立，共记录 " + current.size() + " 条IP-MAC映射");
+            notifySnapshot(current);
             return;
         }
 
@@ -114,6 +126,13 @@ public class ArpMonitor {
             // 更新基线
             ipToMac.put(ip, newMac);
             macToIps.computeIfAbsent(newMac, k -> new HashSet<>()).add(ip);
+        }
+        notifySnapshot(current);
+    }
+
+    private void notifySnapshot(List<ArpEntry> entries) {
+        if (snapshotListener != null) {
+            snapshotListener.onSnapshot(entries);
         }
     }
 }

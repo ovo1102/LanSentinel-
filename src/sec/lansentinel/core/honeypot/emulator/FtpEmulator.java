@@ -26,16 +26,26 @@ public class FtpEmulator implements ServiceEmulator {
 
         String user = "";
         String pass = "";
-        String line = in.readLine();   // 期望: USER xxx
-        if (line != null && line.toUpperCase().startsWith("USER")) {
-            user = line.substring(4).trim();
-            send(out, "331 Password required\r\n");
-            line = in.readLine();      // 期望: PASS xxx
-            if (line != null && line.toUpperCase().startsWith("PASS")) {
-                pass = line.substring(4).trim();
+        // 读取容错：对端异常断开时，已获得的尝试行为仍要留证
+        try {
+            String line = in.readLine();   // 期望: USER xxx
+            if (line != null && line.toUpperCase().startsWith("USER")) {
+                user = line.substring(4).trim();
+                send(out, "331 Password required\r\n");
+                line = in.readLine();      // 期望: PASS xxx
+                if (line != null && line.toUpperCase().startsWith("PASS")) {
+                    pass = line.substring(4).trim();
+                }
             }
+        } catch (IOException ignored) {
+            // 对端提前断开，已读到的部分继续作为凭据尝试记录
         }
-        send(out, "530 Login incorrect\r\n");
+        // 凭据已获取，最后的拒绝响应发送失败也不丢弃证据
+        try {
+            send(out, "530 Login incorrect\r\n");
+        } catch (IOException ignored) {
+            // 客户端提前断开
+        }
         return "user=" + safe(user) + " pass=" + safe(pass);
     }
 

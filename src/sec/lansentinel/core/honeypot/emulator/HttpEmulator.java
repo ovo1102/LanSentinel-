@@ -40,8 +40,12 @@ public class HttpEmulator implements ServiceEmulator {
         String firstLine = request.lines().findFirst().orElse("").trim();
         String credential = extractCredential(request);
 
-        socket.getOutputStream().write(FAKE_PAGE.getBytes(StandardCharsets.UTF_8));
-        socket.getOutputStream().flush();
+        // 回传伪造页面失败（客户端提前断开）不影响请求证据留存
+        try {
+            socket.getOutputStream().write(FAKE_PAGE.getBytes(StandardCharsets.UTF_8));
+            socket.getOutputStream().flush();
+        } catch (IOException ignored) {
+        }
 
         return credential.isEmpty() ? "request=" + firstLine
                                     : "request=" + firstLine + " " + credential;

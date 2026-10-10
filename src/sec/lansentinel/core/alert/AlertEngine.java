@@ -17,9 +17,14 @@ import sec.lansentinel.model.AttackEvent;
  */
 public class AlertEngine {
 
-    /** 告警监听器：M2阶段控制台打印，M4阶段换成GUI面板 */
+    /** 告警监听器：控制台打印 / GUI告警中心 */
     public interface AlertListener {
         void onAlert(AlertEvent alert);
+    }
+
+    /** 原始攻击事件监听器：GUI蜜罐面板用它实时展示所有捕获行为 */
+    public interface EventListener {
+        void onEvent(AttackEvent event);
     }
 
     /** 历史窗口时长（秒），超出的事件被清理 */
@@ -27,6 +32,7 @@ public class AlertEngine {
 
     private final List<AlertRule> rules = new ArrayList<>();
     private final List<AlertListener> listeners = new ArrayList<>();
+    private final List<EventListener> eventListeners = new ArrayList<>();
     /** 各源IP的近期行为历史，key=源IP */
     private final Map<String, List<AttackEvent>> history = new HashMap<>();
 
@@ -38,8 +44,16 @@ public class AlertEngine {
         listeners.add(listener);
     }
 
+    public void addEventListener(EventListener listener) {
+        eventListeners.add(listener);
+    }
+
     /** 记录一条攻击事件并执行规则研判（多线程入口，需同步） */
     public synchronized void recordEvent(AttackEvent event) {
+        // 先分发原始事件（蜜罐面板实时展示），再执行规则研判
+        for (EventListener l : eventListeners) {
+            l.onEvent(event);
+        }
         history.computeIfAbsent(event.getSrcIp(), k -> new ArrayList<>()).add(event);
         pruneExpired();
         for (AlertRule rule : rules) {

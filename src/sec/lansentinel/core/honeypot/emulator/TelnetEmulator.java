@@ -26,13 +26,23 @@ public class TelnetEmulator implements ServiceEmulator {
 
         send(out, "Ubuntu 18.04.5 LTS\r\n");
         send(out, "login: ");
-        String user = readLine(in);
+        String user = "";
+        String pass = "";
+        // 读取容错：即使对端以RST方式断开导致后半段读取失败，已获得的尝试行为也要留证
+        try {
+            user = readLine(in);
+            send(out, "Password: ");
+            pass = readLine(in);
+        } catch (IOException ignored) {
+            // 对端提前断开，已读到的部分继续作为凭据尝试记录
+        }
 
-        send(out, "Password: ");
-        String pass = readLine(in);
-
-        // 永远拒绝，攻击者大概率换一组凭据再试
-        send(out, "\r\nLogin incorrect\r\n");
+        // 凭据已获取，此后的发送即使因客户端提前断开而失败，也不能丢弃证据
+        try {
+            send(out, "\r\nLogin incorrect\r\n");
+        } catch (IOException ignored) {
+            // 攻击者拿到提示前就断开，属正常行为
+        }
         return "user=" + safe(user) + " pass=" + safe(pass);
     }
 
