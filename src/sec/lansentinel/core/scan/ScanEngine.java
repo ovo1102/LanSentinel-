@@ -6,7 +6,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
+import sec.lansentinel.core.alert.AlertEngine;
 import sec.lansentinel.model.HostInfo;
 import sec.lansentinel.model.PortInfo;
 import sec.lansentinel.service.AuthGuard;
@@ -34,6 +34,8 @@ public class ScanEngine {
     private final int threadPoolSize;
     private final int portConnectTimeout;
     private final Set<Integer> highRiskPorts;
+    /** 可选注入：错位服务等扫描告警统一汇入 */
+    private AlertEngine alertEngine;
 
     public ScanEngine(AuthGuard authGuard, int hostTimeout, int portTimeout,
                       int bannerTimeout, int threadPoolSize, Set<Integer> highRiskPorts) {
@@ -44,6 +46,12 @@ public class ScanEngine {
         this.serviceChecker = new ServiceChecker();
         this.threadPoolSize = threadPoolSize;
         this.highRiskPorts = highRiskPorts;
+    }
+
+    /** 注入告警引擎后，扫描发现的服务错位等问题将进入统一告警中心 */
+    public ScanEngine withAlertEngine(AlertEngine alertEngine) {
+        this.alertEngine = alertEngine;
+        return this;
     }
 
     /**
@@ -72,7 +80,7 @@ public class ScanEngine {
                 if (host.isAlive()) {
                     // 在线主机才扫端口，离线主机跳过以节省时间
                     new PortScanner(host, ports, portConnectTimeout,
-                                    bannerGrabber, serviceChecker).run();
+                                    bannerGrabber, serviceChecker, alertEngine).run();
                     host.setRiskScore(calculateRisk(host));
                 }
                 synchronized (finished) {

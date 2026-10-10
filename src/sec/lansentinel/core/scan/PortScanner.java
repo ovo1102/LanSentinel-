@@ -3,6 +3,8 @@ package sec.lansentinel.core.scan;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import sec.lansentinel.core.alert.AlertEngine;
+import sec.lansentinel.model.AlertEvent;
 import sec.lansentinel.model.HostInfo;
 import sec.lansentinel.model.PortInfo;
 
@@ -17,14 +19,18 @@ public class PortScanner implements Runnable {
     private final int connectTimeout;
     private final BannerGrabber bannerGrabber;
     private final ServiceChecker serviceChecker;
+    /** 告警引擎可为空（纯扫描场景），错位事件统一汇入告警中心 */
+    private final AlertEngine alertEngine;
 
     public PortScanner(HostInfo host, int[] ports, int connectTimeout,
-                       BannerGrabber bannerGrabber, ServiceChecker serviceChecker) {
+                       BannerGrabber bannerGrabber, ServiceChecker serviceChecker,
+                       AlertEngine alertEngine) {
         this.host = host;
         this.ports = ports;
         this.connectTimeout = connectTimeout;
         this.bannerGrabber = bannerGrabber;
         this.serviceChecker = serviceChecker;
+        this.alertEngine = alertEngine;
     }
 
     @Override
@@ -36,8 +42,10 @@ public class PortScanner implements Runnable {
                 // 开放端口进一步抓取Banner并检查服务一致性
                 info.setBanner(bannerGrabber.grab(host.getIp(), port));
                 String mismatchAlert = serviceChecker.check(info);
-                if (mismatchAlert != null) {
-                    System.out.println("  [错位告警] " + host.getIp() + " " + mismatchAlert);
+                if (mismatchAlert != null && alertEngine != null) {
+                    alertEngine.fireAlert(new AlertEvent(
+                            AlertEvent.Level.WARNING, "扫描引擎",
+                            host.getIp() + " " + mismatchAlert));
                 }
             }
             host.addPort(info);

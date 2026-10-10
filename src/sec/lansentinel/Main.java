@@ -11,8 +11,10 @@ import java.util.List;
 import sec.lansentinel.core.alert.AlertEngine;
 import sec.lansentinel.core.alert.BruteForceRule;
 import sec.lansentinel.core.alert.PortScanRule;
+import sec.lansentinel.core.arp.ArpMonitor;
 import sec.lansentinel.core.honeypot.HoneypotServer;
 import sec.lansentinel.core.scan.ScanEngine;
+import sec.lansentinel.model.ArpEntry;
 import sec.lansentinel.model.HostInfo;
 import sec.lansentinel.service.AuthGuard;
 import sec.lansentinel.service.ConfigManager;
@@ -24,6 +26,7 @@ import sec.lansentinel.util.IpUtil;
  * 运行模式：
  *   java sec.lansentinel.Main scan      M1 网段扫描演示
  *   java sec.lansentinel.Main honeypot  M2 蜜罐诱捕演示（含模拟攻击自检）
+ *   java sec.lansentinel.Main arp       M3 ARP欺骗检测演示（含模拟攻击自检）
  */
 public class Main {
 
@@ -39,6 +42,8 @@ public class Main {
         String mode = args.length > 0 ? args[0] : "scan";
         if ("honeypot".equalsIgnoreCase(mode)) {
             runHoneypotDemo(config);
+        } else if ("arp".equalsIgnoreCase(mode)) {
+            runArpDemo(config);
         } else {
             runScanDemo(config, authGuard);
         }
@@ -70,6 +75,11 @@ public class Main {
                 config.getInt("scan.banner.timeout", 1500),
                 config.getInt("scan.thread.pool", 50),
                 config.getIntSet("risk.high.ports"));
+
+        // 接入统一告警中心：服务错位等扫描告警统一从这里输出
+        AlertEngine alertEngine = new AlertEngine();
+        alertEngine.addListener(alert -> System.out.println("\n>>> 触发告警 " + alert));
+        engine.withAlertEngine(alertEngine);
 
         engine.scan(targets, ports, new ScanEngine.ScanListener() {
             @Override
@@ -112,6 +122,34 @@ public class Main {
         Thread.sleep(1000);
         server.stopAll();
         System.out.println("\n--- 蜜罐自检完成 ---");
+    }
+
+    // ==================== M3: ARP欺骗检测演示 ====================
+
+    private static void runArpDemo(ConfigManager config) {
+        AlertEngine alertEngine = new AlertEngine();
+        alertEngine.addListener(alert -> System.out.println("\n>>> 触发告警 " + alert));
+
+        ArpMonitor monitor = new ArpMonitor(
+                alertEngine, config.getInt("arp.interval", 30));
+
+        // 1. 读取真实ARP表建立基线（真实部署时由定时器周期执行）
+        System.out.println("\n--- 读取系统ARP表并建立基线 ---");
+        monitor.pollOnce();
+
+        // 2. 注入模拟ARP数据验证两类攻击检测（使用授权网段内的虚拟网关地址）
+        System.out.println("\n--- 模拟ARP欺骗攻击（自检） ---");
+        // 虚拟网关首次出现：仅记录，不告警
+        monitor.detect(List.of(
+                new ArpEntry("172.20.85.1", "aa-aa-aa-aa-aa-aa", "dynamic")));
+        // 特征1：网关IP的MAC突然改变 -> 冒充网关
+        monitor.detect(List.of(
+                new ArpEntry("172.20.85.1", "bb-bb-bb-bb-bb-bb", "dynamic")));
+        // 特征2：另一IP也解析到同一个MAC -> 中间人一对多映射
+        monitor.detect(List.of(
+                new ArpEntry("172.20.85.2", "bb-bb-bb-bb-bb-bb", "dynamic")));
+
+        System.out.println("\n--- ARP监控自检完成 ---");
     }
 
     /** 模拟攻击者：多次爆破Telnet + 触碰多个诱饵端口 */

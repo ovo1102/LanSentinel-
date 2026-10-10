@@ -44,7 +44,17 @@ public class AlertEngine {
         pruneExpired();
         for (AlertRule rule : rules) {
             Optional<AlertEvent> alert = rule.evaluate(event, history);
-            alert.ifPresent(this::fire);
+            alert.ifPresent(this::fireAlert);
+        }
+    }
+
+    /**
+     * 直接派发一条告警：供ARP监控这类"自身即可判定"、
+     * 不经过攻击事件规则链的模块使用。
+     */
+    public void fireAlert(AlertEvent alert) {
+        for (AlertListener listener : listeners) {
+            listener.onAlert(alert);
         }
     }
 
@@ -53,11 +63,5 @@ public class AlertEngine {
         LocalDateTime deadline = LocalDateTime.now().minusSeconds(WINDOW_SECONDS);
         history.values().forEach(list -> list.removeIf(e -> e.getTime().isBefore(deadline)));
         history.entrySet().removeIf(entry -> entry.getValue().isEmpty());
-    }
-
-    private void fire(AlertEvent alert) {
-        for (AlertListener listener : listeners) {
-            listener.onAlert(alert);
-        }
     }
 }
